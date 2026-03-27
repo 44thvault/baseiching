@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BIGGEE I CHING</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0b0f0b;
+      color: #90ff90;
+      font-family: "Courier New", monospace;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 760px;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+
+    .sub {
+      text-align: center;
+      color: #b6ffb6;
+      margin-bottom: 24px;
+    }
+
+    .panel {
+      border: 2px solid #90ff90;
+      padding: 20px;
+      margin-bottom: 20px;
+      background: rgba(0, 20, 0, 0.35);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    input, textarea, button {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 1rem;
+      margin-bottom: 14px;
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+      padding: 12px;
+      background: #071007;
+      color: #90ff90;
+      border: 1px solid #90ff90;
+    }
+
+    button {
+      padding: 14px;
+      background: #90ff90;
+      color: #081008;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.92;
+    }
+
+    .small {
+      font-size: 0.92rem;
+      color: #b6ffb6;
+    }
+
+    .result-title {
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+    }
+
+    .result-meta {
+      margin-bottom: 10px;
+      color: #b6ffb6;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .status {
+      margin-bottom: 12px;
+      color: #d4ffd4;
+      word-break: break-word;
+    }
+
+    .hex-lines {
+      line-height: 1.5;
+      white-space: pre-line;
+      margin: 16px 0;
+      font-size: 1.1rem;
+    }
+
+    .footer {
+      text-align: center;
+      color: #b6ffb6;
+      font-size: 0.9rem;
+      margin-top: 12px;
+    }
+
+    a {
+      color: #90ff90;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BIGGEE I CHING</h1>
+    <div class="sub">Consult the oracle on Base</div>
+
+    <div class="panel">
+      <div class="status" id="walletStatus">Wallet not connected.</div>
+      <button id="connectBtn">Connect MetaMask</button>
+
+      <label for="question">Your question</label>
+      <textarea id="question" placeholder="Type your question here..."></textarea>
+
+      <button id="castBtn">Cast Hexagram</button>
+
+      <div class="small">
+        This sends a transaction to Base and stores your last cast onchain.
+      </div>
+    </div>
+
+    <div class="panel hidden" id="resultPanel">
+      <div class="result-title" id="hexName"></div>
+      <div class="result-meta" id="hexNumber"></div>
+      <div class="hex-lines" id="hexLines"></div>
+      <div id="hexMeaning"></div>
+    </div>
+
+    <div class="panel">
+      <button id="loadLastBtn">Load Last Onchain Cast</button>
+      <div class="small" id="lastCastInfo"></div>
+    </div>
+
+    <div class="footer">
+      Deployed on Base. Readings rendered locally in the site.
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <script>
+    const contractAddress = "YOUR_CONTRACT_ADDRESS_HERE";
+
+    const abi = [
+      "function castHexagram(string memory question) public returns (uint256)",
+      "function getLastCast() public view returns (address seeker, uint256 hexagram, uint256 timestamp, string memory question)",
+      "function totalCasts() public view returns (uint256)",
+      "event CastMade(address indexed seeker, uint256 hexagram, uint256 timestamp, string question)"
+    ];
+
+    const hexagrams = {
+      1: {
+        name: "1. The Creative",
+        lines: "────────\n────────\n────────\n────────\n────────\n────────",
+        meaning: "Pure creative force. Strong action, initiative, will, leadership, and heaven energy."
+      },
+      2: {
+        name: "2. The Receptive",
+        lines: "──── ────\n──── ────\n──── ────\n──── ────\n──── ────\n──── ────",
+        meaning: "Yielding strength. Receptivity, devotion, patience, and earth energy."
+      },
+      3: {
+        name: "3. Difficulty at the Beginning",
+        lines: "──── ────\n────────\n──── ────\n──── ────\n────────\n──── ────",
+        meaning: "Beginnings are chaotic. Stay steady and organize the emerging situation."
+      },
+      4: {
+        name: "4. Youthful Folly",
+        lines: "────────\n──── ────\n──── ────\n──── ────\n────────\n──── ────",
+        meaning: "Inexperience, learning, and discipline. Seek guidance and avoid arrogance."
+      },
+      5: {
+        name: "5. Waiting",
+        lines: "──── ────\n────────\n──── ────\n────────\n────────\n────────",
+        meaning: "Do not force the moment. Prepare, wait, and let timing ripen."
+      },
+      6: {
+        name: "6. Conflict",
+        lines: "────────\n────────\n────────\n──── ────\n────────\n──── ────",
+        meaning: "Tension and dispute. Act carefully, avoid escalation, seek clarity."
+      },
+      7: {
+        name: "7. The Army",
+        lines: "──── ────\n──── ────\n──── ────\n──── ────\n────────\n──── ────",
+        meaning: "Discipline, organization, command, and collective effort."
+      },
+      8: {
+        name: "8. Holding Together",
+        lines: "──── ────\n────────\n──── ────\n──── ────\n──── ────\n──── ────",
+        meaning: "Union, loyalty, and alignment. Choose your bonds wisely."
+      },
+      9: {
+        name: "9. The Taming Power of the Small",
+        lines: "────────\n────────\n────────\n──── ────\n────────\n────────",
+        meaning: "Small influences accumulate. Restraint and subtle progress."
+      },
+      10: {
+        name: "10. Treading",
+        lines: "────────\n────────\n──── ────\n────────\n────────\n────────",
+        meaning: "Conduct and careful movement. Proceed with awareness and respect."
+      },
+      11: {
+        name: "11. Peace",
+        lines: "────────\n────────\n────────\n──── ────\n──── ────\n──── ────",
+        meaning: "Harmony, flourishing, and right flow between forces."
+      },
+      12: {
+        name: "12. Standstill",
+        lines: "──── ────\n──── ────\n──── ────\n────────\n────────\n────────",
+        meaning: "Stagnation and blockage. Withdraw from corrupt conditions."
+      },
+      13: {
+        name: "13. Fellowship with Men",
+        lines: "────────\n──── ────\n────────\n────────\n────────\n────────",
+        meaning: "Community, alliance, and shared purpose."
+      },
+      14: {
+        name: "14. Possession in Great Measure",
+        lines: "────────\n────────\n────────\n────────\n──── ────\n────────",
+        meaning: "Abundance, power, and great capacity. Use wealth nobly."
+      },
+      15: {
+        name: "15. Modesty",
+        lines: "──── ────\n──── ────\n────────\n──── ────\n──── ────\n──── ────",
+        meaning: "Humility creates lasting strength."
+      },
+      16: {
+        name: "16. Enthusiasm",
+        lines: "──── ────\n──── ────\n──── ────\n────────\n──── ────\n──── ────",
+        meaning: "Energy rises. Mobilize joyfully but stay grounded."
+      },
+      17: {
+        name: "17. Following",
+        lines: "──── ────\n────────\n────────\n──── ────\n──── ────\n────────",
+        meaning: "Adaptation, responsiveness, and right alignment."
+      },
+      18: {
+        name: "18. Work on What Has Been Spoiled",
+        lines: "────────\n──── ────\n──── ────\n────────\n────────\n──── ────",
+        meaning: "Repair decay. Correct inherited problems."
+      },
+      19: {
+        name: "19. Approach",
+        lines: "──── ────\n──── ────\n────────\n────────\n──── ────\n──── ────",
+        meaning: "Advance with care and benevolence."
+      },
+      20: {
+        name: "20. Contemplation",
+        lines: "──── ────\n──── ────\n────────\n──── ────\n────────\n────────",
+        meaning: "Observe deeply before acting."
+      },
+      21: {
+        name: "21. Biting Through",
+        lines: "────────\n──── ────\n────────\n──── ────\n──── ────\n────────",
+        meaning: "Cut through obstacles decisively."
+      },
+      22: {
+        name: "22. Grace",
+        lines: "────────\n──── ────\n──── ────\n────────\n──── ────\n────────",
+        meaning: "Beauty, adornment, and refined presentation."
+      },
+      23: {
+        name: "23. Splitting Apart",
+        lines: "──── ────\n──── ────\n──── ────\n──── ────\n──── ────\n────────",
+        meaning: "Decay, erosion, and stripping away."
+      },
+      24: {
+        name: "24. Return",
+        lines: "────────\n──── ────\n──── ────\n──── ────\n──── ────\n──── ────",
+        meaning: "A turning point. Return to the path."
+      },
+      25: {
+        name: "25. Innocence",
+        lines: "────────\n────────\n────────\n──── ────\n──── ────\n────────",
+        meaning: "Natural sincerity and uncorrupted action."
+      },
+      26: {
+        name: "26. The Taming Power of the Great",
+        lines: "────────\n──── ────\n──── ────\n────────\n────────\n────────",
+        meaning: "Great restraint, accumulation, and stored power."
+      },
+      27: {
+        name: "27. Nourishment",
+        lines: "────────\n──── ────\n──── ────\n──── ────\n──── ────\n────────",
+        meaning: "What feeds you shapes you."
+      },
+      28: {
+        name: "28. Preponderance of the Great",
+        lines: "──── ────\n────────\n────────\n────────\n────────\n──── ────",
+        meaning: "Great pressure. The beam bends under weight."
+      },
+      29: {
+        name: "29. The Abysmal",
+        lines: "──── ────\n────────\n──── ────\n──── ────\n────────\n──── ────",
+        meaning: "Danger repeated. Move with sincerity and skill."
+      },
+      30: {
+        name: "30. The Clinging",
+        lines: "────────\n──── ────\n────────\n────────\n──── ────\n────────",
+        meaning: "Light, clarity, dependence, and fire."
+      },
+      31: {
+        name: "31. Influence",
+        lines: "──── ────\n──── ────\n────────\n────────\n────────\n──── ────",
+        meaning: "Mutual attraction, influence, and subtle movement."
+      },
+      32: {
+        name: "32. Duration",
+        lines: "──── ────\n────────\n────────\n────────\n──── ────\n──── ────",
+        meaning: "Endurance and continuity."
+      },
+      33: {
+        name: "33. Retreat",
+        lines: "────────\n────────\n──── ────\n──── ────\n────────\n────────",
+        meaning: "Withdraw strategically. Retreat is not defeat."
+      },
+      34: {
+        name: "34. The Power of the Great",
+        lines: "────────\n────────\n──── ────\n──── ────\n────────\n────────",
+        meaning: "Great power must be guided by restraint."
+      },
+      35: {
+        name: "35. Progress",
+        lines: "──── ────\n──── ────\n────────\n────────\n──── ────\n────────",
+        meaning: "Advancement and visible rising."
+      },
+      36: {
+        name: "36. Darkening of the Light",
+        lines: "────────\n──── ────\n────────\n──── ────\n──── ────\n──── ────",
+        meaning: "Protect your inner light in dark times."
+      },
+      37: {
+        name: "37. The Family",
+        lines: "────────\n──── ────\n────────\n────────\n──── ────\n────────",
+        meaning: "Roles, order, and right relation in the household."
+      },
+      38: {
+        name: "38. Opposition",
+        lines: "────────\n──── ────\n────────\n──── ────\n────────\n────────",
+        meaning: "Difference and polarity. Find what can still align."
+      },
+      39: {
+        name: "39. Obstruction",
+        lines: "──── ────\n──── ────\n────────\n──── ────\n────────\n──── ────",
+        meaning: "Difficulty in movement. Seek support and change angle."
+      },
+      40: {
+        name: "40. Deliverance",
+        lines: "──── ────\n────────\n──── ────\n────────\n──── ────\n──── ────",
+        meaning: "Release from tension. The knot begins to loosen."
+      },
+      41: {
+        name: "41. Decrease",
+        lines: "────────\n──── ────\n──── ────\n──── ────\n────────\n────────",
+        meaning: "Reduce excess. Simplicity restores balance."
+      },
+      42: {
+        name: "42. Increase",
+        lines: "────────\n────────\n──── ────\n──── ────\n──── ────\n────────",
+        meaning: "Growth and blessing. What helps increases."
+      },
+      43: {
+        name: "43. Breakthrough",
+        lines: "────────\n────────\n────────\n────────\n────────\n──── ────",
+        meaning: "Declare truth and cut through what is false."
+      },
+      44: {
+        name: "44. Coming to Meet",
+        lines: "──── ────\n────────\n────────\n────────\n────────\n────────",
+        meaning: "A powerful encounter appears suddenly."
+      },
+      45: {
+        name: "45. Gathering Together",
+        lines: "──── ────\n────────\n──── ────\n──── ────\n──── ────\n────────",
+        meaning: "Assembly, convergence, and shared devotion."
+      },
+      46: {
+        name: "46. Pushing Upward",
+        lines: "────────\n──── ────\n──── ────\n──── ────\n──── ────\n────────",
+        meaning: "Steady ascent through devotion and effort."
+      },
+      47: {
+        name: "47. Oppression",
+        lines: "──── ────\n────────\n────────\n──── ────\n────────\n──── ────",
+        meaning: "Constraint, exhaustion, and inward testing."
+      },
+      48: {
+        name: "48. The Well",
+        lines: "──── ────\n────────\n──── ────\n────────\n────────\n──── ────",
+        meaning: "The source remains. Renewal comes from depth."
+      },
+      49: {
+        name: "49. Revolution",
+        lines: "────────\n──── ────\n────────\n────────\n────────\n──── ────",
+        meaning: "Radical change at the right time."
+      },
+      50: {
+        name: "50. The Cauldron",
+        lines: "────────\n──── ────\n────────\n──── ────\n────────\n────────",
+        meaning: "Transformation, sacred nourishment, and culture."
+      },
+      51: {
+        name: "51. The Arousing",
+        lines: "──── ────\n──── ────\n────────\n──── ────\n──── ────\n────────",
+        meaning: "Shock, thunder, and awakening."
+      },
+      52: {
+        name: "52. Keeping Still",
+        lines: "────────\n──── ────\n──── ────\n────────\n──── ────\n──── ────",
+        meaning: "Stillness, stopping, and centered presence."
+      },
+      53: {
+        name: "53. Development",
+        lines: "────────\n────────\n──── ────\n────────\n──── ────\n──── ────",
+        meaning: "Gradual progress. Slow growth is true growth."
+      },
+      54: {
+        name: "54. The Marrying Maiden",
+        lines: "──── ────\n──── ────\n────────\n────────\n──── ────\n────────",
+        meaning: "Secondary position, adaptation, and delicate timing."
+      },
+      55: {
+        name: "55. Abundance",
+        lines: "──── ────\n────────\n──── ────\n────────\n──── ────\n────────",
+        meaning: "Fullness, peak intensity, and bright visibility."
+      },
+      56: {
+        name: "56. The Wanderer",
+        lines: "────────\n──── ────\n────────\n──── ────\n──── ────\n────────",
+        meaning: "Travel, impermanence, and cautious movement."
+      },
+      57: {
+        name: "57. The Gentle",
+        lines: "────────\n────────\n──── ────\n────────\n────────\n──── ────",
+        meaning: "Penetrating influence, wind, and subtle persistence."
+      },
+      58: {
+        name: "58. The Joyous",
+        lines: "──── ────\n────────\n────────\n──── ────\n────────\n────────",
+        meaning: "Joy, openness, exchange, and the lake."
+      },
+      59: {
+        name: "59. Dispersion",
+        lines: "────────\n────────\n──── ────\n──── ────\n────────\n──── ────",
+        meaning: "Dissolution of barriers and scattered tension."
+      },
+      60: {
+        name: "60. Limitation",
+        lines: "──── ────\n────────\n──── ────\n────────\n────────\n──── ────",
+        meaning: "Boundaries create order and preserve energy."
+      },
+      61: {
+        name: "61. Inner Truth",
+        lines: "────────\n────────\n──── ────\n──── ────\n────────\n────────",
+        meaning: "Sincerity at the center creates trust."
+      },
+      62: {
+        name: "62. Preponderance of the Small",
+        lines: "──── ────\n──── ────\n────────\n────────\n──── ────\n──── ────",
+        meaning: "Small matters are favored. Stay humble and precise."
+      },
+      63: {
+        name: "63. After Completion",
+        lines: "────────\n──── ────\n────────\n──── ────\n────────\n──── ────",
+        meaning: "Completion exists, but vigilance is still needed."
+      },
+      64: {
+        name: "64. Before Completion",
+        lines: "──── ────\n────────\n──── ────\n────────\n──── ────\n────────",
+        meaning: "The crossing is not yet finished. Stay alert to the end."
+      }
+    };
+
+    let provider;
+    let signer;
+    let contract;
+
+    const walletStatus = document.getElementById("walletStatus");
+    const connectBtn = document.getElementById("connectBtn");
+    const castBtn = document.getElementById("castBtn");
+    const loadLastBtn = document.getElementById("loadLastBtn");
+    const questionInput = document.getElementById("question");
+    const resultPanel = document.getElementById("resultPanel");
+    const hexName = document.getElementById("hexName");
+    const hexNumber = document.getElementById("hexNumber");
+    const hexLines = document.getElementById("hexLines");
+    const hexMeaning = document.getElementById("hexMeaning");
+    const lastCastInfo = document.getElementById("lastCastInfo");
+
+    async function connectWallet() {
+      if (!window.ethereum) {
+        walletStatus.textContent = "MetaMask not found.";
+        return;
+      }
+
+      try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = await provider.getSigner();
+
+        const network = await provider.getNetwork();
+        const address = await signer.getAddress();
+
+        walletStatus.textContent = `Connected: ${address} | Chain ID: ${network.chainId.toString()}`;
+
+        contract = new ethers.Contract(contractAddress, abi, signer);
+      } catch (err) {
+        walletStatus.textContent = "Connection failed: " + err.message;
+      }
+    }
+
+    function renderHexagram(num) {
+      const hex = hexagrams[num];
+      if (!hex) return;
+
+      resultPanel.classList.remove("hidden");
+      hexName.textContent = hex.name;
+      hexNumber.textContent = `Hexagram ${num}`;
+      hexLines.textContent = hex.lines;
+      hexMeaning.textContent = hex.meaning;
+    }
+
+    async function castHexagram() {
+      if (!contract) {
+        walletStatus.textContent = "Connect wallet first.";
+        return;
+      }
+
+      const question = questionInput.value.trim() || "No question given";
+
+      try {
+        walletStatus.textContent = "Sending transaction...";
+        const tx = await contract.castHexagram(question);
+        await tx.wait();
+
+        walletStatus.textContent = "Transaction confirmed.";
+
+        const last = await contract.getLastCast();
+        const num = Number(last[1]);
+        renderHexagram(num);
+
+        lastCastInfo.textContent =
+          `Last cast question: "${last[3]}" | Hexagram: ${num} | Seeker: ${last[0]}`;
+      } catch (err) {
+        walletStatus.textContent = "Cast failed: " + err.message;
+      }
+    }
+
+    async function loadLastCast() {
+      if (!window.ethereum) {
+        lastCastInfo.textContent = "MetaMask not found.";
+        return;
+      }
+
+      try {
+        if (!provider) {
+          provider = new ethers.BrowserProvider(window.ethereum);
+        }
+
+        const readContract = new ethers.Contract(contractAddress, abi, provider);
+        const last = await readContract.getLastCast();
+        const num = Number(last[1]);
+
+        if (num < 1 || num > 64) {
+          lastCastInfo.textContent = "No cast found yet.";
+          return;
+        }
+
+        renderHexagram(num);
+
+        const ts = Number(last[2]);
+        const date = new Date(ts * 1000).toLocaleString();
+
+        lastCastInfo.textContent =
+          `Question: "${last[3]}" | Hexagram: ${num} | Wallet: ${last[0]} | Time: ${date}`;
+      } catch (err) {
+        lastCastInfo.textContent = "Could not load last cast: " + err.message;
+      }
+    }
+
+    connectBtn.addEventListener("click", connectWallet);
+    castBtn.addEventListener("click", castHexagram);
+    loadLastBtn.addEventListener("click", loadLastCast);
+  </script>
+</body>
+</html>
